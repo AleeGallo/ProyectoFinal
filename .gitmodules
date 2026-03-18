@@ -1,0 +1,3 @@
+[submodule "ModuloTFT/lvgl"]
+	path = ModuloTFT/lvgl
+	url = https://github.com/lvgl/lvgl
