@@ -1,11 +1,10 @@
 #include "pico/stdlib.h"
-#include <stdio.h>
 #include "hardware/spi.h"
 #include "hardware/gpio.h"
 #include "lvgl.h"
 #include "display.h"
 #include "display_driver.h"
-#include "touch_driver.h"
+#include <stdio.h>
 
 // ==========================================================
 // =================== CONFIGURACIÓN ========================
@@ -79,12 +78,6 @@ typedef enum
 
 screen_t current_screen = SCREEN_HOME;
 
-
-/* static inline void CS_L() { gpio_put(PIN_CS, 0); }
-static inline void CS_H() { gpio_put(PIN_CS, 1); }
-static inline void TCS_L() { gpio_put(PIN_TCS, 0); }
-static inline void TCS_H() { gpio_put(PIN_TCS, 1); } */
-
 // ==========================================================
 // =================== GRÁFICOS =============================
 // ==========================================================
@@ -137,8 +130,8 @@ void fill_rect(int x,int y,int w,int h,uint16_t c){
 // ==========================================================
 // =================== 7 SEGMENTOS ==========================
 // ==========================================================
-
-/* const uint8_t digitos7[10] = {
+/* 
+const uint8_t digitos7[10] = {
     0b1111110, 0b0110000, 0b1101101, 0b1111001, 0b0110011,
     0b1011011, 0b1011111, 0b1110000, 0b1111111, 0b1111011};
 
@@ -165,8 +158,8 @@ void draw_big_digit(int d, int x, int y, uint16_t c)
         fill_rect(x, y + T, T, H / 2 - T, c);
     if (s & 0b0000001)
         fill_rect(x + T, y + H / 2 - T / 2, W - 2 * T, T, c);
-} */
-
+}
+ */
 // ==========================================================
 // =================== INTERFAZ =============================
 // ==========================================================
@@ -281,13 +274,13 @@ void draw_current_screen()
         draw_screen_config();
         break;
     }
-} */
-
+}
+ */
 // ==========================================================
 // =================== BARRA DE TAREAS =============================
 // ==========================================================
-
-/* void draw_toolbar()
+/* 
+void draw_toolbar()
 {
     int y = TFT_H - TOOLBAR_HEIGHT;
 
@@ -362,7 +355,7 @@ bool check_toolbar(uint16_t x, uint16_t y)
 // =================== TOUCH ================================
 // ==========================================================
 
-/* uint16_t touch_read(uint8_t cmd)
+uint16_t touch_read(uint8_t cmd)
 {
 
     CS_H();
@@ -412,7 +405,7 @@ void add_digit(int digit)
 {
     current_value = ((current_value % 1000) * 10) + digit;
     draw_display();
-} */
+}
 
 /* void check_touch()
 {
@@ -456,7 +449,7 @@ void add_digit(int digit)
 
     sleep_ms(80);
 } */
-/* 
+
 void check_content_touch(uint16_t x, uint16_t y)
 {
     if (y < CONTENT_TOP || y > CONTENT_BOTTOM)
@@ -552,12 +545,12 @@ void check_encoder()
 
     last_enc_a = a;
 }
- */
+
 // ==========================================================
 // =================== INIT TFT =============================
 // ==========================================================
 
-/* void st7796_init()
+void st7796_init()
 {
 
     tft_reset();
@@ -578,7 +571,7 @@ void check_encoder()
     tft_cmd(0x11);
     sleep_ms(120);
     tft_cmd(0x29);
-} */
+}
 
 // ==========================================================
 // =================== MAIN =================================
@@ -652,23 +645,13 @@ int main()
 {
     stdio_init_all();
 
-    display_driver_init(); // Inicializa Display
-    display_init();         // Inicializa LVGL
-    touch_driver_init();    // Inicializa Touch
-
-    ui_create();
-
+    display_driver_init(); // 🔥 SOLO HARDWARE
+    display_init();        // 🔥 LVGL + init display
+    ui_create();           // 🔥 UI
 
     while (1)
     {
         lv_timer_handler();
         sleep_ms(5);
-
-        printf("IRQ: %d\n", gpio_get(PIN_TIRQ));
-
-        uint16_t x = touch_read(0x90);
-        uint16_t y = touch_read(0xD0);
-
-        printf("RAW X:%d Y:%d\n", x, y);
     }
 }

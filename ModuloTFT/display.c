@@ -1,7 +1,9 @@
-#include "display.h"
-#include "lvgl.h"
+#include "pico/stdlib.h"
 #include <stdio.h>
 #include <string.h>
+#include "display.h"
+#include "lvgl.h"
+
 
 // funciones del driver
 extern void set_window(uint16_t x0,uint16_t y0,uint16_t x1,uint16_t y1);
@@ -27,7 +29,10 @@ static int infused = 300;
 static int volume_total = 500;
 
 
-// flush callback
+// ----------------------------------------------------
+// -------------------- CALLBACKS  ------------------------
+// ----------------------------------------------------
+
 static void flush_cb(lv_display_t *disp,
                      const lv_area_t *area,
                      uint8_t *px_map)
@@ -40,6 +45,10 @@ static void flush_cb(lv_display_t *disp,
 
     lv_display_flush_ready(disp);
 }
+
+// ----------------------------------------------------
+// --------------------- INITS ------------------------
+// ----------------------------------------------------
 
 
 // init display
@@ -63,15 +72,19 @@ void display_init(void)
 }
 
 
+
+
+
+
 // actualizar valores
 static void update_values()
 {
     char txt[32];
 
-    sprintf(txt,"%04d ml/h",flow);
+    snprintf(txt,sizeof(txt),"%04d ml/h",flow);
     lv_label_set_text(label_flow,txt);
 
-    sprintf(txt,"Volumen: %04d ml",volume);
+    snprintf(txt,sizeof(txt), "Volumen: %04d ml",volume);
     lv_label_set_text(label_vol,txt);
 
     lv_bar_set_value(bar_infusion, infused, LV_ANIM_ON);

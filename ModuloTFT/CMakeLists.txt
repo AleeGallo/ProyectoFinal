@@ -36,9 +36,10 @@ pico_sdk_init()
 # Add executable. Default name is the project name, version 0.1
 
 add_executable(ModuloTFT 
-    ModuloTFT.c 
-    display.c    
+    ModuloTFT.c
+    display.c
     display_driver.c
+    touch_driver.c
 )
 
 add_subdirectory(lvgl)
@@ -55,7 +56,8 @@ target_link_libraries(ModuloTFT
         pico_stdlib
         hardware_spi
         hardware_gpio
-        lvgl)
+        lvgl
+)
 
 # Add the standard include files to the build
 target_include_directories(ModuloTFT PRIVATE
@@ -63,8 +65,8 @@ target_include_directories(ModuloTFT PRIVATE
 )
 
 # PARA COMPILAR MAS OPTIMIZADO
-target_compile_options(${PROJECT_NAME} PRIVATE -flto)
-target_link_options(${PROJECT_NAME} PRIVATE -flto)
+#target_compile_options(${PROJECT_NAME} PRIVATE -flto)
+#target_link_options(${PROJECT_NAME} PRIVATE -flto)
 
 pico_add_extra_outputs(ModuloTFT)
 
