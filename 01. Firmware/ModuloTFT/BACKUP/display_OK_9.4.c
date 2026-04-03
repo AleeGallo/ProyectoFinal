@@ -56,7 +56,7 @@ void display_init(void)
 {
     lv_init();
 
-    st7796_init();
+    st7796_init(); 
 
     disp = lv_display_create(TFT_WIDTH, TFT_HEIGHT);
 

@@ -23,7 +23,7 @@ if (EXISTS ${picoVscode})
     include(${picoVscode})
 endif()
 # ====================================================================================
-set(PICO_BOARD pico2 CACHE STRING "Board type")
+set(PICO_BOARD pico2_w CACHE STRING "Board type")
 
 # Pull in Raspberry Pi Pico SDK (must be before project)
 include(pico_sdk_import.cmake)
@@ -35,11 +35,17 @@ pico_sdk_init()
 
 # Add executable. Default name is the project name, version 0.1
 
+file(GLOB UI_SOURCES
+    ui/*.c
+    ui/screens/*.c
+    ui/components/*.c
+)
+
 add_executable(ModuloTFT 
     ModuloTFT.c
-    display.c
     display_driver.c
     touch_driver.c
+    ${UI_SOURCES}
 )
 
 add_subdirectory(lvgl)
@@ -52,6 +58,9 @@ pico_enable_stdio_uart(ModuloTFT 0)
 pico_enable_stdio_usb(ModuloTFT 1)
 
 # Add the standard library to the build
+
+target_compile_definitions(ModuloTFT PRIVATE LV_CONF_INCLUDE_SIMPLE=1)
+
 target_link_libraries(ModuloTFT
         pico_stdlib
         hardware_spi
@@ -62,11 +71,16 @@ target_link_libraries(ModuloTFT
 # Add the standard include files to the build
 target_include_directories(ModuloTFT PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}
+        ${CMAKE_CURRENT_LIST_DIR}/ui
+)
+
+target_include_directories(lvgl PRIVATE
+    ${CMAKE_CURRENT_LIST_DIR}       # carpeta de tu proyecto donde está lv_conf.h
 )
 
 # PARA COMPILAR MAS OPTIMIZADO
 #target_compile_options(${PROJECT_NAME} PRIVATE -flto)
 #target_link_options(${PROJECT_NAME} PRIVATE -flto)
 
-pico_add_extra_outputs(ModuloTFT)
 
+pico_add_extra_outputs(ModuloTFT)
