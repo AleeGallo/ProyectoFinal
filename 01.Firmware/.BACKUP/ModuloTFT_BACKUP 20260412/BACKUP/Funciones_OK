@@ -1,0 +1,58 @@
+ while(1){
+
+        uint16_t x, y;
+
+        if(touch_get_xy(&x, &y)){
+
+            // -------- LÓGICA IZQ / DER --------
+            if(x < TFT_W/2){
+                contador++;
+            } else {
+                contador--;
+            }
+
+            // limitar rango
+            if(contador < 0) contador = 0;
+            if(contador > 99) contador = 99;
+
+            // redibujar
+            clear_number_area();
+            draw_big_number(contador, C_BLANCO);
+
+            // ---- esperar que suelte ----
+            while(!gpio_get(PIN_TIRQ)){
+                sleep_ms(10);
+            }
+
+            sleep_ms(150); // pequeño debounce
+        }
+
+        sleep_ms(10);
+    }
+}
+
+
+// Simula el color donde aprieto
+
+while(1){
+
+        uint16_t x, y;
+
+        if(touch_get_xy(&x, &y)){
+
+            uint16_t color = colores_fondo[color_idx];
+            color_idx++;
+            if(color_idx >= 6) color_idx = 0;
+
+            draw_filled_circle(x, y, CIRCLE_RADIUS, color);
+
+            // esperar release
+            while(!gpio_get(PIN_TIRQ)){
+                sleep_ms(5);
+            }
+
+            sleep_ms(50);
+        }
+
+        sleep_ms(5);
+    }

@@ -1,0 +1,553 @@
+// FUNCIONA OK CON TOUCH Y CALCULADORA DE EJEMPLO
+
+#include "pico/stdlib.h"
+#include "hardware/spi.h"
+#include "hardware/gpio.h"
+#include <stdio.h>
+
+// =========== CONSTANTES ==================
+
+#define TFT_SPI spi0
+
+#define PIN_CS   17
+#define PIN_DC   15
+#define PIN_RST  20
+#define PIN_SCK  18
+#define PIN_MOSI 19
+#define PIN_TCS   21
+#define PIN_TIRQ  22
+#define PIN_MISO  16
+
+#define PIN_BTN 14
+
+#define TFT_W 480
+#define TFT_H 320
+#define X_MIN 750
+#define X_MAX 3050
+#define Y_MIN 630
+#define Y_MAX 3085
+
+#define BTN_W 96
+#define BTN_H 80
+#define BTN_ROWS 3
+#define BTN_COLS 4
+
+#define DISPLAY_HEIGHT 80
+
+// ----- COLORES -----
+#define C_NEGRO   0x0000
+#define C_BLANCO  0xFFFF
+#define C_ROJO    0xF800
+#define C_VERDE   0x07E0
+#define C_AZUL    0x001F
+#define C_AMARILLO 0xFFE0
+#define C_CYAN    0x07FF
+#define C_MAGENTA 0xF81F
+#define CIRCLE_RADIUS 20   // diámetro ≈ 40 px ≈ 1 cm
+
+
+// ============================== VARIABLES ================================
+
+uint16_t colores_fondo[] = {
+    C_ROJO, C_VERDE, C_AZUL, C_AMARILLO, C_CYAN, C_MAGENTA
+};
+
+uint32_t current_value = 0;
+int color_idx = 0;
+
+
+// ---- LOW LEVEL TFT ----
+void tft_cmd(uint8_t c);
+void tft_data(uint8_t d);
+void tft_data_buf(uint8_t *b,int n);
+void tft_reset(void);
+
+// ---- INIT ----
+void st7796_init(void);
+
+// ---- GRAFICA BASE ----
+void set_window(uint16_t x0,uint16_t y0,uint16_t x1,uint16_t y1);
+void fill_color(uint16_t c);
+void draw_pixel(uint16_t x, uint16_t y, uint16_t c);
+void fill_rect(int x,int y,int w,int h,uint16_t c);
+void draw_filled_circle(int cx, int cy, int r, uint16_t color);
+
+// ---- TESTS (si los dejás en el archivo) ----
+void test_barras(void);
+void test_grilla(void);
+void test_gradiente(void);
+
+// ---- INPUT ----
+bool boton_presionado(void);
+
+
+// ---- DIGITOS GIGANTES ----
+void seg_h(int x,int y,int w,int h,uint16_t c);
+void seg_v(int x,int y,int w,int h,uint16_t c);
+void draw_big_digit(int d,int x,int y,uint16_t c);
+void draw_big_number(int num,uint16_t color);
+
+
+// ---------- LOW LEVEL ----------
+
+static inline void CS_L() { gpio_put(PIN_CS, 0); }
+static inline void CS_H() { gpio_put(PIN_CS, 1); }
+// -------- TOUCH XPT2046 --------
+static inline void TCS_L() { gpio_put(PIN_TCS, 0); }
+static inline void TCS_H() { gpio_put(PIN_TCS, 1); }
+
+
+uint16_t touch_read(uint8_t cmd) {
+
+    CS_H(); // asegurar TFT deseleccionado
+
+    //spi_set_format(TFT_SPI, 8, SPI_CPOL_0, SPI_CPHA_1, SPI_MSB_FIRST);
+
+    uint8_t tx[3] = {cmd, 0x00, 0x00};
+    uint8_t rx[3] = {0};
+
+    TCS_L();
+    sleep_us(2);
+    spi_write_read_blocking(TFT_SPI, tx, rx, 3);
+    TCS_H();
+
+    //spi_set_format(TFT_SPI, 8, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
+
+    return ((rx[1] << 8) | rx[2]) >> 3;
+}
+
+bool touch_get_xy(uint16_t *x, uint16_t *y)
+{
+    if (gpio_get(PIN_TIRQ)) return false;
+
+    uint16_t rawx = touch_read(0x90);
+    uint16_t rawy = touch_read(0xD0);
+
+    // Escalado real
+    int32_t tx = (rawx - X_MIN) * TFT_W  / (X_MAX - X_MIN);
+    int32_t ty = (rawy - Y_MIN) * TFT_H  / (Y_MAX - Y_MIN);
+
+    // Clamp de seguridad
+    if (tx < 0) tx = 0;
+    if (tx >= TFT_W) tx = TFT_W - 1;
+
+    if (ty < 0) ty = 0;
+    if (ty >= TFT_H) ty = TFT_H - 1;
+
+    tx = TFT_W - tx;
+    ty = TFT_H - ty;
+
+    *x = tx;
+    *y = ty;
+
+    return true;
+}
+
+void clear_number_area(){
+    fill_rect(40,40,400,240,C_NEGRO);
+}
+
+void tft_cmd(uint8_t c){
+    gpio_put(PIN_DC,0);
+    CS_L();
+    spi_write_blocking(TFT_SPI,&c,1);
+    CS_H();
+}
+
+void tft_data(uint8_t d){
+    gpio_put(PIN_DC,1);
+    CS_L();
+    spi_write_blocking(TFT_SPI,&d,1);
+    CS_H();
+}
+
+void tft_data_buf(uint8_t *b,int n){
+    gpio_put(PIN_DC,1);
+    CS_L();
+    spi_write_blocking(TFT_SPI,b,n);
+    CS_H();
+}
+
+void tft_reset(){
+    gpio_put(PIN_RST,0);
+    sleep_ms(60);
+    gpio_put(PIN_RST,1);
+    sleep_ms(150);
+}
+
+
+// =========== FUNCIONES ===============
+
+void draw_pixel(uint16_t x, uint16_t y, uint16_t c){
+    set_window(x,y,x,y);
+    uint8_t d[2]={c>>8,c};
+    tft_data_buf(d,2);
+}
+
+void fill_rect(int x,int y,int w,int h,uint16_t c){
+
+    set_window(x,y,x+w-1,y+h-1);
+
+    uint8_t hi=c>>8, lo=c;
+    static uint8_t buf[256];
+
+    for(int i=0;i<256;i+=2){
+        buf[i]=hi;
+        buf[i+1]=lo;
+    }
+
+    gpio_put(PIN_DC,1);
+    CS_L();
+
+    int total=w*h*2;
+    for(int i=0;i<total;i+=256)
+        spi_write_blocking(TFT_SPI,buf,256);
+
+    CS_H();
+}
+
+void test_barras(){
+
+    uint16_t col[6]={0xF800,0xFFE0,0x07E0,0x07FF,0x001F,0xF81F};
+
+    int w=TFT_W/6;
+
+    for(int i=0;i<6;i++)
+        fill_rect(i*w,0,w,TFT_H,col[i]);
+}
+
+void test_grilla(){
+
+    fill_color(0x0000);
+
+    for(int x=0;x<TFT_W;x+=20)
+        for(int y=0;y<TFT_H;y++)
+            draw_pixel(x,y,0xFFFF);
+
+    for(int y=0;y<TFT_H;y+=20)
+        for(int x=0;x<TFT_W;x++)
+            draw_pixel(x,y,0xFFFF);
+}
+
+void test_gradiente(){
+
+    for(int x=0;x<TFT_W;x++){
+        uint8_t r = x*31/TFT_W;
+        uint16_t c = (r<<11);
+        fill_rect(x,0,1,TFT_H,c);
+    }
+}
+
+
+
+// ------- DIGITOS 7 SEG -------
+
+const uint8_t digitos7[10] = {
+    0b1111110,
+    0b0110000,
+    0b1101101,
+    0b1111001,
+    0b0110011,
+    0b1011011,
+    0b1011111,
+    0b1110000,
+    0b1111111,
+    0b1111011
+};
+
+void seg_h(int x,int y,int w,int h,uint16_t c){
+    fill_rect(x,y,w,h,c);
+}
+
+void seg_v(int x,int y,int w,int h,uint16_t c){
+    fill_rect(x,y,w,h,c);
+}
+
+void draw_big_digit(int d,int x,int y,uint16_t c){
+
+    int W=30;
+    int H=50;
+    int T=8;
+
+    uint8_t s = digitos7[d];
+
+    if(s & 0b1000000) seg_h(x+T,y, W-2*T,T,c);            // A
+    if(s & 0b0100000) seg_v(x+W-T,y+T,T,H/2-T,c);         // B
+    if(s & 0b0010000) seg_v(x+W-T,y+H/2,T,H/2-T,c);       // C
+    if(s & 0b0001000) seg_h(x+T,y+H-T,W-2*T,T,c);         // D
+    if(s & 0b0000100) seg_v(x,y+H/2,T,H/2-T,c);           // E
+    if(s & 0b0000010) seg_v(x,y+T,T,H/2-T,c);             // F
+    if(s & 0b0000001) seg_h(x+T,y+H/2-T/2,W-2*T,T,c);     // G
+}
+
+void draw_big_number(int num,uint16_t color){
+
+    int d1 = (num/10)%10;
+    int d2 = num%10;
+
+    draw_big_digit(d1,60,50,color);
+    draw_big_digit(d2,260,50,color);
+}
+
+
+
+// ----- BOTONERA CALCULADORA -------
+
+// ----- BOTONERA CALCULADORA -------
+
+void draw_button(int x, int y, int num)
+{
+    fill_rect(x, y, BTN_W-4, BTN_H-4, C_BLANCO);
+
+    // Dibujamos el número pequeño usando 7 segmentos
+    draw_big_digit(num, x + 10, y + 10, C_NEGRO);
+}
+
+void draw_keypad()
+{
+    int num = 1;
+
+    for(int row=0; row<3; row++)
+    {
+        for(int col=0; col<4; col++)
+        {
+            int x = col * (TFT_W/4);
+            int y = DISPLAY_HEIGHT + row * BTN_H;
+
+            fill_rect(x, y, (TFT_W/4)-4, BTN_H-4, C_BLANCO);
+
+            if(num <= 9)
+            {
+                draw_big_digit(num, x+20, y+10, C_NEGRO);
+                num++;
+            }
+            else if(num == 10)
+            {
+                draw_big_digit(0, x+20, y+10, C_NEGRO);
+                num++;
+            }
+        }
+    }
+}
+
+void draw_display()
+{
+    fill_rect(0,0,TFT_W,DISPLAY_HEIGHT,C_VERDE);
+
+    if(current_value > 9999)
+        current_value = 9999;
+
+    int d1 = (current_value/1000)%10;
+    int d2 = (current_value/100)%10;
+    int d3 = (current_value/10)%10;
+    int d4 = current_value%10;
+
+    draw_big_digit(d1,40,10,C_BLANCO);
+    draw_big_digit(d2,140,10,C_BLANCO);
+    draw_big_digit(d3,240,10,C_BLANCO);
+    draw_big_digit(d4,340,10,C_BLANCO);
+}
+
+void add_digit(int digit)
+{
+    current_value =
+        ((current_value % 1000) * 10) + digit;
+
+    draw_display();
+}
+
+void check_touch()
+{
+    uint16_t tx, ty;
+
+    if(!touch_get_xy(&tx,&ty))
+        return;
+
+    if(ty < DISPLAY_HEIGHT)
+        return;
+
+    int col = tx / (TFT_W / 4);
+    int row = (ty - DISPLAY_HEIGHT) / BTN_H;
+
+    if(col > 3 || row > 2)
+        return;
+
+    int number = row * 4 + col + 1;
+
+    if(number == 10)
+        number = 0;
+
+    if(number > 10)
+        return;
+
+    add_digit(number);
+
+    // esperar release
+    while(!gpio_get(PIN_TIRQ))
+        sleep_ms(5);
+
+    sleep_ms(80);
+}
+
+
+// ---------- INIT ROBUSTO ST7796 SPI ----------
+
+void st7796_init(){
+
+    tft_reset();
+
+    tft_cmd(0x01);
+    sleep_ms(150);
+
+    tft_cmd(0xF0); tft_data(0xC3);
+    tft_cmd(0xF0); tft_data(0x96);
+
+    tft_cmd(0x36); tft_data(0x28);   // MADCTL estable
+
+    tft_cmd(0x3A); tft_data(0x55);   // RGB565
+
+    tft_cmd(0xB4); tft_data(0x01);
+    tft_cmd(0xB7); tft_data(0xC6);
+
+    tft_cmd(0xC1); tft_data(0x06);
+    tft_cmd(0xC2); tft_data(0xA7);
+    tft_cmd(0xC5); tft_data(0x18);
+
+    // Ventana completa explícita
+    tft_cmd(0x2A);
+    uint8_t col[4]={0,0, 0x01,0xDF}; // 0-479
+    tft_data_buf(col,4);
+
+    tft_cmd(0x2B);
+    uint8_t row[4]={0,0, 0x01,0x3F}; // 0-319
+    tft_data_buf(row,4);
+
+    tft_cmd(0xF0); tft_data(0x3C);
+    tft_cmd(0xF0); tft_data(0x69);
+
+    tft_cmd(0x11);
+    sleep_ms(120);
+
+    tft_cmd(0x29);
+}
+
+// ---------- WINDOW ----------
+
+void set_window(uint16_t x0,uint16_t y0,uint16_t x1,uint16_t y1){
+
+    uint8_t d[4];
+
+    tft_cmd(0x2A);
+    d[0]=x0>>8; d[1]=x0;
+    d[2]=x1>>8; d[3]=x1;
+    tft_data_buf(d,4);
+
+    tft_cmd(0x2B);
+    d[0]=y0>>8; d[1]=y0;
+    d[2]=y1>>8; d[3]=y1;
+    tft_data_buf(d,4);
+
+    tft_cmd(0x2C);
+}
+
+// ---------- FILL BURST ----------
+
+void fill_color(uint16_t c){
+
+    set_window(0,0,TFT_W-1,TFT_H-1);
+
+    uint8_t hi=c>>8, lo=c&0xFF;
+
+    static uint8_t buf[512];
+    for(int i=0;i<512;i+=2){
+        buf[i]=hi;
+        buf[i+1]=lo;
+    }
+
+    gpio_put(PIN_DC,1);
+    CS_L();
+
+    int total = TFT_W*TFT_H*2;
+    for(int i=0;i<total;i+=512)
+        spi_write_blocking(TFT_SPI,buf,512);
+
+    CS_H();
+}
+
+void draw_filled_circle(int cx, int cy, int r, uint16_t color){
+
+    for(int y = -r; y <= r; y++){
+        for(int x = -r; x <= r; x++){
+            if(x*x + y*y <= r*r){
+                int px = cx + x;
+                int py = cy + y;
+
+                if(px >= 0 && px < TFT_W &&
+                   py >= 0 && py < TFT_H){
+                    draw_pixel(px, py, color);
+                }
+            }
+        }
+    }
+}
+
+bool boton_presionado(){
+
+    static uint32_t last = 0;
+
+    if(!gpio_get(PIN_BTN)){          // activo en LOW
+        if(to_ms_since_boot(get_absolute_time()) - last > 180){
+            last = to_ms_since_boot(get_absolute_time());
+            return true;
+        }
+    }
+    return false;
+}
+
+
+
+// ---------- MAIN ----------
+
+int main(){
+
+    stdio_init_all();
+
+    spi_init(TFT_SPI, 4000000); //2MHz
+    spi_set_format(TFT_SPI, 8, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
+
+    gpio_set_function(PIN_SCK, GPIO_FUNC_SPI);
+    gpio_set_function(PIN_MOSI, GPIO_FUNC_SPI);
+    gpio_set_function(PIN_MISO, GPIO_FUNC_SPI);
+
+    gpio_init(PIN_CS);  gpio_set_dir(PIN_CS,GPIO_OUT);
+    gpio_init(PIN_DC);  gpio_set_dir(PIN_DC,GPIO_OUT);
+    gpio_init(PIN_RST); gpio_set_dir(PIN_RST,GPIO_OUT);
+
+    gpio_init(PIN_TCS); gpio_set_dir(PIN_TCS,GPIO_OUT);
+    gpio_put(PIN_TCS,1);
+
+    gpio_init(PIN_TIRQ);
+    gpio_set_dir(PIN_TIRQ,GPIO_IN);
+    gpio_pull_up(PIN_TIRQ);
+
+    CS_H();
+    sleep_ms(200);
+    st7796_init();
+
+    int contador = 0;
+
+    // Llena color negro
+    fill_color(C_NEGRO);
+    CS_H();
+
+    // Funciones del display
+    //draw_big_number(contador, C_BLANCO);
+    draw_display();
+    draw_keypad();
+
+    while(1)
+    {
+        check_touch();
+        sleep_ms(5);
+    }
+}
