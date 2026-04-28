@@ -4,7 +4,9 @@
             "name": "Pico",
             "includePath": [
                 "${workspaceFolder}/**",
-                "${userHome}/.pico-sdk/sdk/2.2.0/**"
+                "${userHome}/.pico-sdk/sdk/2.2.0/**",
+                "c:\\Users\\aleja\\AppData\\Roaming\\Code\\User\\globalStorage\\themastercoder007.lvgl-live-preview\\lvgl\\9.4.0",
+                "c:\\Users\\aleja\\AppData\\Roaming\\Code\\User\\globalStorage\\themastercoder007.lvgl-live-preview\\lvgl\\9.4.0\\src"
             ],
             "forcedInclude": [
                 "${workspaceFolder}/build/generated/pico_base/pico/config_autogen.h",

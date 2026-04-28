@@ -97,6 +97,8 @@ add_executable(ModuloTFT
     ModuloTFT.c
     display_driver.c
     touch_driver.c
+    encoder_driver.c
+    ui_actions.c
     ${UI_SOURCES}
     ${EEZ_SOURCES}
 )

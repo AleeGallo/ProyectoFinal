@@ -1,0 +1,69 @@
+
+/* **********USO DE ENCODER EN FreeRTOS***************/
+
+/*-------------- PINES -------------*/
+
+#define PIN_ENC_CLK     12      // GP12 (pin 16 físico)
+#define PIN_ENC_DT      11      // GP11 (pin 15 físico)
+#define PIN_ENC_SW      10      // GP10 (pin 14 físico)
+
+/* ----------------- VARIABLES Y ESTRUCTURAS ----------------- */
+
+// Variables de antirrebote
+volatile uint64_t last_clk_time = 0;
+volatile uint64_t last_sw_time = 0;
+volatile bool last_clk_state = 1;  // estado anterior de CLK (Encoder)
+volatile bool last_sw_state = 1;   // estado anterior de SW (Encoder)
+
+
+/*------------- INTERRUPCIONES  -------------*/
+
+// Interrupcion de giro encoder
+void gpio_callback(uint gpio, uint32_t events) {
+    uint64_t now = time_us_64();
+    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+
+    if (gpio == PIN_ENC_CLK) {
+        bool clk = gpio_get(PIN_ENC_CLK);
+        bool dt  = gpio_get(PIN_ENC_DT);
+
+        // Detectar flanco y hacer antirrebote por tiempo
+        if (clk == 1 && last_clk_state == 0 && (now - last_clk_time) > 10000) {
+            last_clk_time = now;
+
+            if (dt != clk) {
+                xSemaphoreGiveFromISR(Sem_Bin_Select_Mas, &xHigherPriorityTaskWoken);
+            } else {
+                xSemaphoreGiveFromISR(Sem_Bin_Select_Menos, &xHigherPriorityTaskWoken);
+            }
+        }
+
+        last_clk_state = clk;
+    }
+
+    if (gpio == PIN_ENC_SW) {
+        bool sw = gpio_get(PIN_ENC_SW);
+
+        // Detectar flanco de bajada con antirrebote
+        if (sw == 0 && last_sw_state == 1 && (now - last_sw_time) > 25000) {
+            last_sw_time = now;
+            xSemaphoreGiveFromISR(Sem_Bin_OK, &xHigherPriorityTaskWoken);
+        }
+
+        last_sw_state = sw;
+    }
+
+    if (gpio == PIN_BTN_CONFIG) {
+        uint64_t now = time_us_64();
+        BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+
+        // Detectar flanco de bajada con antirrebote
+        if ((now - last_config_time) > 20000) {
+            last_config_time = now;
+            xSemaphoreGiveFromISR(Sem_Bin_Config, &xHigherPriorityTaskWoken);
+        }
+
+    }
+
+    portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+}

@@ -9,9 +9,6 @@
  * THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 #include "eez-flow.h"
-#if EEZ_FOR_LVGL_LZ4_OPTION
-#include "eez-flow-lz4.h"
-#endif
 
 // -----------------------------------------------------------------------------
 // core/action.cpp
@@ -83,8 +80,6 @@ void getAllocInfo(uint32_t &free, uint32_t &alloc) {
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
-#if EEZ_FOR_LVGL_LZ4_OPTION
-#endif
 #define SCPI_ERROR_OUT_OF_DEVICE_MEMORY -321
 #define SCPI_ERROR_INVALID_BLOCK_DATA -161
 namespace eez {
@@ -92,59 +87,12 @@ Assets *g_mainAssets;
 bool g_mainAssetsAreMutable;
 void fixOffsets(Assets *assets);
 bool decompressAssetsData(const uint8_t *assetsData, uint32_t assetsDataSize, Assets *decompressedAssets, uint32_t maxDecompressedAssetsSize, int *err) {
-#if EEZ_FOR_LVGL_LZ4_OPTION
-	uint32_t compressedDataOffset;
-	uint32_t decompressedSize;
-	auto header = (Header *)assetsData;
-	if (header->tag == HEADER_TAG_COMPRESSED) {
-		decompressedAssets->projectMajorVersion = header->projectMajorVersion;
-		decompressedAssets->projectMinorVersion = header->projectMinorVersion;
-        decompressedAssets->assetsType = header->assetsType;
-		compressedDataOffset = sizeof(Header);
-		decompressedSize = header->decompressedSize;
-	} else {
-		decompressedAssets->projectMajorVersion = PROJECT_VERSION_V2;
-		decompressedAssets->projectMinorVersion = 0;
-        decompressedAssets->assetsType = ASSETS_TYPE_RESOURCE;
-		compressedDataOffset = 4;
-		decompressedSize = header->tag;
-	}
-#ifdef __GNUC__
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Winvalid-offsetof"
-#endif
-	auto decompressedDataOffset = offsetof(Assets, settings);
-#ifdef __GNUC__
-#pragma GCC diagnostic pop
-#endif
-	if (decompressedDataOffset + decompressedSize > maxDecompressedAssetsSize) {
-		if (err) {
-			*err = SCPI_ERROR_OUT_OF_DEVICE_MEMORY;
-		}
-		return false;
-	}
-	int compressedSize = assetsDataSize - compressedDataOffset;
-    int decompressResult = LZ4_decompress_safe(
-		(const char *)(assetsData + compressedDataOffset),
-		(char *)decompressedAssets + decompressedDataOffset,
-		compressedSize,
-		decompressedSize
-	);
-	if (decompressResult != (int)decompressedSize) {
-		if (err) {
-			*err = SCPI_ERROR_INVALID_BLOCK_DATA;
-		}
-		return false;
-	}
-	return true;
-#else
     EEZ_UNUSED(assetsData);
     EEZ_UNUSED(assetsDataSize);
     EEZ_UNUSED(decompressedAssets);
     EEZ_UNUSED(maxDecompressedAssetsSize);
     *err = -1;
     return false;
-#endif
 }
 static void allocMemoryForDecompressedAssets(const uint8_t *assetsData, uint32_t assetsDataSize, uint8_t *&decompressedAssetsMemoryBuffer, uint32_t &decompressedAssetsMemoryBufferSize) {
     EEZ_UNUSED(assetsDataSize);

@@ -4,9 +4,23 @@
 
 #include "display_driver.h"
 #include "touch_driver.h"
+#include "encoder_driver.h"
 #include "ui/ui.h"
 //#include "pico/time.h"
 
+/* ------------------- DEFINES -------------------*/
+
+
+/* ---------- VARIABLES Y ESTRUCTURAS ------------*/
+
+typedef struct {
+    float flow_rate;
+    float volume;
+    float time;
+    bool use_kvo;
+    uint8_t mode;
+    uint8_t method;
+} infusion_config_t;
 
 // Timer callback para incrementar el tick de LVGL
 bool lv_tick_timer_callback(struct repeating_timer *t) {
@@ -16,12 +30,12 @@ bool lv_tick_timer_callback(struct repeating_timer *t) {
 
 int main()
 {
+    /* Inicializaciones*/
     stdio_init_all();
-
     lv_init();
-
     display_driver_init();
     touch_driver_init();
+    //encoder_driver_init();
 
     ui_init();
 
